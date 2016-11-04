@@ -29,7 +29,10 @@
 #include <obs-config.h>
 #include <obs.hpp>
 
+#include <QtGlobal>
+#include <QGuiApplication>
 #include <QProxyStyle>
+#include <QScreen>
 
 #include "qt-wrappers.hpp"
 #include "obs-app.hpp"
@@ -448,7 +451,7 @@ static string GetProfileDirFromName(const char *name)
 	if (GetConfigPath(path, sizeof(path), "obs-studio/basic/profiles") <= 0)
 		return outputPath;
 
-	strcat(path, "/*.*");
+	strcat(path, "/*");
 
 	if (os_glob(path, 0, &glob) != 0)
 		return outputPath;
@@ -855,6 +858,9 @@ bool OBSApp::OBSInit()
 		if (!StartupOBS(locale.c_str(), GetProfilerNameStore()))
 			return false;
 
+		blog(LOG_INFO, "Portable mode: %s",
+				portable_mode ? "true" : "false");
+
 		mainWindow = new OBSBasic();
 
 		mainWindow->setAttribute(Qt::WA_DeleteOnClose, true);
@@ -904,6 +910,11 @@ string OBSApp::GetVersionString() const
 #endif
 
 	return ver.str();
+}
+
+bool OBSApp::IsPortableMode()
+{
+	return portable_mode;
 }
 
 #ifdef __APPLE__
@@ -1309,6 +1320,10 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 
 	QCoreApplication::addLibraryPath(".");
 
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 6, 0))
+	QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+#endif
+
 	OBSApp program(argc, argv, profilerNameStore.get());
 	try {
 		program.AppInit();
@@ -1520,20 +1535,10 @@ bool GetClosestUnusedFileName(std::string &path, const char *extension)
 
 bool WindowPositionValid(QRect rect)
 {
-	vector<MonitorInfo> monitors;
-	GetMonitors(monitors);
-
-	for (auto &monitor : monitors) {
-		int left   = int(monitor.x);
-		int top    = int(monitor.y);
-		int right  = left + int(monitor.cx);
-		int bottom = top  + int(monitor.cy);
-
-		if ((rect.left() - right)  < 0 && (left - rect.right())  < 0 &&
-		    (rect.top()  - bottom) < 0 && (top  - rect.bottom()) < 0)
+	for (QScreen* screen: QGuiApplication::screens()) {
+		if (screen->availableGeometry().intersects(rect))
 			return true;
 	}
-
 	return false;
 }
 
